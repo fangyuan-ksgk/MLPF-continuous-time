@@ -1,0 +1,517 @@
+---
+title: "Langcode"
+output: html_notebook
+---
+# Data Generation
+```{r}
+## In reality data is given, here we generate it ourself for simulation purpose.
+## Note that with the change of measure, the distribution of data Y follows that of a standard Brownian motion.
+T = 100
+## Lmax decide the finest level of our observations, 2^(-Lmax) is the time interval between each observations
+Lmax = 10
+Ydis = vector(mode = "numeric",length = T*2^Lmax+1)
+bm = vector(mode = "numeric",length = T*2^Lmax)
+for(t in 1:(T*2^Lmax+1)){
+  bm[t] = rnorm(1, mean = 0, sd = 2^(-Lmax))
+  Ydis[t+1] = sum(bm[1:t])
+}
+```
+
+
+# Langevin True Value
+```{r}
+# Gradient Estimator, dYt = Xt*dt + dBt, dXt = (-11/20)*Xt*(1+(Xt^2)/10)^(-1)*dt + dWt (Using change of measure)
+# For convenience, we could use the same data set as the OU process.
+date()
+
+ltemp = 10
+N = 100 * 2^ltemp
+T = 100
+R = 200
+l = ltemp
+#initialization
+Xun = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+ko = vector(mode = "numeric",length = N)
+Xun1 = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+estimate_PF = vector(mode = "numeric",length = R)
+## replication of algorithm to get "true value"
+for(h in 1:R){
+ess = vector(mode = "numeric",length = T)
+Xun[1,]=ko
+Xun1[1,]=ko
+W = vector(mode = "numeric",length = N)
+G = vector(mode = "numeric",length = N)
+W = W+1
+for (p in 1:T) {
+  ## Below is Euler update taking place in time p-1 to p, Xun[p,] represent singals at time p-1
+  for(i in 1:N){
+  ## Particle update with Euler method
+  xdis = vector(mode = "numeric", length =(2^l+1))
+  xdis[1] = Xun1[p,i]
+  for (j in 1:(2^l)) {
+      dw = rnorm(1, mean=0, sd = sqrt(0.5^l))
+      xdis[j+1] = (-11/20)*xdis[j]*(1+0.1*xdis[j]^2)^(-1)*0.5^l + dw + xdis[j]
+  }
+  Xun[p+1,i]=xdis[(2^l+1)]
+  ## G Function update
+  xdd = vector(mode="numeric",length =(2^l))
+  for(id in 1:(2^l)){
+xdd[id] = xdis[id]*(Ydis[(p-1)*2^Lmax+id*2^(Lmax-l)+1]-  Ydis[(p-1)*2^Lmax+(id-1)*2^(Lmax-l)+1]) - 0.5^(l+1)*(xdis[id]^2)
+  }
+  G[i]= sum(xdd)
+  }
+  ## Normalized weight
+  W = exp(G-max(G))
+  w = W/sum(W)
+  ## Calculating correct Effective Sample Size
+  ess[p]=(sum(w^2))^(-1)
+  if(ess[p]<(N/2)){
+  xindex = vector(mode = "numeric",length = N)
+  xindex = rdiscrete(N,W)
+  for(i in 1:N){
+    Xun1[p+1,i]=Xun[p+1,xindex[i]]
+  }
+  }
+  if(ess[p]>=(N/2)){
+    Xun1[p+1,]=Xun[p+1,]
+  }
+}
+## ESS bind for multiple Replications
+ESS = rbind(ESS,ess)
+estimate_PF[h] = sum(Xun[T+1,]*w)
+}
+tv = mean(estimate_PF)
+date()
+
+```
+
+
+# Langevin PF
+```{r}
+# Gradient Estimator, dYt = Xt*dt + dBt, dXt = (-11/20)*Xt*(1+(Xt^2)/10)^(-1)*dt + dWt (Using change of measure)
+
+date()
+estPF = vector(mode = "numeric",length = 8)
+MSE_PF = vector(mode = "numeric",length = 8)
+var_PF = vector(mode = "numeric",length = 8)
+cost_PF = vector(mode = "numeric",length = 8)
+for(ltemp in 1:8){
+N = 100 * 2^ltemp
+T = 100
+R = 200
+l = ltemp
+#initialization
+Xun = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+ko = vector(mode = "numeric",length = N)
+Xun1 = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+estimate_PF = vector(mode = "numeric",length = R)
+## replication of algorithm to get "true value"
+for(h in 1:R){
+ess = vector(mode = "numeric",length = T)
+Xun[1,]=ko
+Xun1[1,]=ko
+W = vector(mode = "numeric",length = N)
+G = vector(mode = "numeric",length = N)
+W = W+1
+for (p in 1:T) {
+  ## Below is Euler update taking place in time p-1 to p, Xun[p,] represent singals at time p-1
+  for(i in 1:N){
+  ## Particle update with Euler method
+  xdis = vector(mode = "numeric", length =(2^l+1))
+  xdis[1] = Xun1[p,i]
+  for (j in 1:(2^l)) {
+      dw = rnorm(1, mean=0, sd = sqrt(0.5^l))
+      xdis[j+1] = (-11/20)*xdis[j]*(1+0.1*xdis[j]^2)^(-1)*0.5^l + dw + xdis[j]
+  }
+  Xun[p+1,i]=xdis[(2^l+1)]
+  ## G Function update
+  xdd = vector(mode="numeric",length =(2^l))
+  for(id in 1:(2^l)){
+xdd[id] = xdis[id]*(Ydis[(p-1)*2^Lmax+id*2^(Lmax-l)+1]-  Ydis[(p-1)*2^Lmax+(id-1)*2^(Lmax-l)+1]) - 0.5^(l+1)*(xdis[id]^2)
+  }
+  G[i]= sum(xdd)
+  }
+  ## Normalized weight
+  W = exp(G-max(G))
+  w = W/sum(W)
+  ## Calculating correct Effective Sample Size
+  ess[p]=(sum(w^2))^(-1)
+  if(ess[p]<(N/2)){
+  xindex = vector(mode = "numeric",length = N)
+  xindex = rdiscrete(N,W)
+  for(i in 1:N){
+    Xun1[p+1,i]=Xun[p+1,xindex[i]]
+  }
+  }
+  if(ess[p]>=(N/2)){
+    Xun1[p+1,]=Xun[p+1,]
+  }
+}
+## ESS bind for multiple Replications
+ESS = rbind(ESS,ess)
+estimate_PF[h] = sum(Xun[T+1,]*w)
+}
+estPF[l] = mean(estimate_PF)
+MSE_PF[l] = (mean(estimate_PF)-tv)^2 + var(estimate_PF)
+var_PF[l] = var(estimate_PF)
+cost_PF[l] = N*2^l*T
+}
+date()
+
+```
+
+
+# Langevin MLPF
+```{r}
+# Gradient Estimator, dYt = Xt*dt+dBt, dXt = (-11/20)*Xt*(1+(Xt^2)/10)^(-1)*dt + dWt (Using change of measure)
+# Multilevel Particle Filter structure 
+date()
+mean_PF = vector(mode = "numeric",length = 8)
+MSE_MLPF = vector(mode = "numeric",length = 8)
+var_MLPF = vector(mode = "numeric",length = 8)
+work_MLPF = vector(mode = "numeric",length = 8)
+for(ltemp in 1:8){
+T = 100
+L = ltemp
+R= 200
+estMLPF = vector(mode = "numeric",length = R)
+
+for(h in 1:R){
+Aa = vector(mode = "numeric", length = L+1)
+for(l in 1:L){
+N = ceiling(2^(L-l)*L) - 1
+ko = vector(mode = "numeric",length = N)
+Xun = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xun1 = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xunc = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xunc1 = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+## replication of algorithm to get "true value"
+Xun[1,]=ko
+Xun1[1,]=ko
+Xunc[1,]=ko
+Xunc1[1,]=ko
+wf = vector(mode = "numeric", length = N)
+wc = vector(mode = "numeric", length = N)
+Wf = vector(mode = "numeric", length = N)
+Wc = vector(mode = "numeric", length = N)
+Gf = vector(mode = "numeric", length = N)
+Gc = vector(mode = "numeric", length = N)
+Bb = vector(mode = "numeric", length = N)
+for (p in 1:T) {
+  for(i in 1:N){
+  ## Particle update for one time unit
+  dw = vector(mode = "numeric", length =(2^l))
+  ## Finer path
+  fdis = vector(mode = "numeric", length =(2^l+1))
+  fdis[1] = Xun1[p,i]
+  for (j in 1:(2^l)) {
+      dw[j] = rnorm(1, mean=0, sd = sqrt(0.5^l))
+      fdis[j+1] = (-11/20)*fdis[j]*(1+0.1*fdis[j]^2)^(-1)*2^(-l) + dw[j] + fdis[j]
+  }
+  Xun[p+1,i]=fdis[(2^l+1)]
+  ##Coarser path
+  cdis = vector(mode = "numeric", length =(2^(l-1)+1))
+  cdis[1] = Xunc1[p,i]
+  for(j in 1:(2^(l-1))){
+    cdis[j+1] = (-11/20)*cdis[j]*(1+0.1*cdis[j]^2)^(-1)*0.5^(l-1) + (dw[2*j]+dw[2*j-1]) + cdis[j]
+  }
+  Xunc[p+1,i]=cdis[(2^(l-1)+1)]
+  ## G Function,note that there should only be one set of data,thus the y_{(k+1)*\Delta_{L}} - y_{(k)*\Delta_{L}} should be sampled only once
+   xdd = vector(mode="numeric",length =(2^l))
+  for(id in 1:(2^l)){
+    xdd[id] = fdis[id]*(Ydis[(p-1)*2^Lmax+id*2^(Lmax-l)+1]-Ydis[(p-1)*2^Lmax+(id-1)*2^(Lmax-l)+1]) - 0.5^(l+1)*(fdis[id]^2)
+  }
+  Gf[i]= sum(xdd)
+  xdd = vector(mode="numeric",length =(2^(l-1)))
+  for(id in 1:(2^(l-1))){
+    xdd[id] = cdis[id]*(Ydis[(p-1)*2^Lmax+id*2^(Lmax-l+1)+1]-Ydis[(p-1)*2^Lmax+(id-1)*2^(Lmax-l+1)+1]) - 0.5^(l)*(cdis[id]^2)
+  }
+  Gc[i]= sum(xdd)
+  }
+  ## normalized weights
+  Wf = exp(Gf-max(Gf))
+  Wc = exp(Gc-max(Gc))
+  wf = Wf/sum(Wf)
+  wc = Wc/sum(Wc)
+  ESS1 = (sum(wf^2))^(-1)
+  if(ESS1<(N/2)){
+  minw = vector(mode = "numeric", length = N)
+  for (i in 1:N) {
+    minw[i] = min(wf[i],wc[i])
+  }
+  alpha = sum(minw)
+  dice = runif(1, min = 0, max = 1)
+  If = vector(mode = "numeric", length = N)
+  Ic = vector(mode = "numeric", length = N)
+  Zf = vector(mode = "numeric", length = N)
+  Zc = vector(mode = "numeric", length = N)
+  for (i in 1:N){
+  Zf[i] = wf[i] - minw[i]
+  Zc[i] = wc[i] - minw[i]
+  }
+  if ( dice <= alpha ){
+    If <- rdiscrete(N, minw)
+    Ic <- If
+    } 
+  if ( dice > alpha ){
+    If <- rdiscrete(N, Zf)
+    Ic <- rdiscrete(N, Zc)
+    }
+  for(i in 1:N){
+    Xun1[p+1,i] = Xun[p+1,If[i]]
+    Xunc1[p+1,i] = Xunc[p+1,Ic[i]]
+  }
+  }
+  if(ESS1>=(N>2)){
+    Xun1[p+1,]=Xun[p+1,]
+    Xunc1[p+1,]=Xunc[p+1,]
+  }
+}
+for (i in 1:N) {
+  Bb[i] = wf[i]*Xun[T+1,i] - wc[i]*Xunc[T+1,i]
+}
+Aa[l+1]=sum(Bb)
+}
+## Now, Aa include the summand for l from 1 to L , but l = 0 term has yet to be added into the map.
+N = ceiling(2^(L)*L) - 1
+ko = vector(mode = "numeric",length = N)
+Xun = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xun1 = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xun[1,]=ko
+Xun1[1,]=ko
+Wf = vector(mode = "numeric", length = N)
+Gf = vector(mode = "numeric", length = N)
+Bb = vector(mode = "numeric", length = N)
+for (p in 1:T) {
+  for(i in 1:N){
+  ## Particle update for one time unit
+  ## Finer path
+  fdis = vector(mode = "numeric", length =2)
+  fdis[1] = Xun1[p,i]
+  dw = rnorm(1, mean=0, sd = 1)
+  fdis[2] = (-11/20)*fdis[1]*(1+0.1*fdis[1]^2)^(-1) + dw + fdis[1]
+  Xun[p+1,i]=fdis[2]
+  ## G Function,note that there should only be one set of data,thus the y_{(k+1)*\Delta_{L}} - y_{(k)*\Delta_{L}} should be sampled only once
+   xdd = vector(mode="numeric",length =(2^0))
+  for(id in 1:(2^0)){
+    xdd[id] = fdis[id]*(Ydis[(p-1)*2^Lmax+id*2^(Lmax)+1]-Ydis[(p-1)*2^Lmax+(id-1)*2^(Lmax)+1]) - 0.5^(1)*(fdis[id]^2)
+  }
+  Gf[i]= sum(xdd)
+  }
+  ## normalized weights function
+  Wf = exp(Gf-max(Gf))
+  wf = Wf/sum(Wf)
+  ESS2 = (sum(wf^2))^(-1)
+  if(ESS2<=(N/2)){
+  If = vector(mode = "numeric", length = N)
+  If <- rdiscrete(N, Wf)
+  for(i in 1:N){
+    Xun1[p+1,i] = Xun[p+1,If[i]]
+  }
+  }
+  if(ESS2>(N/2)){
+    Xun1[p+1,]=Xun[p+1,]
+  }
+}
+for (i in 1:N) {
+  Bb[i] = wf[i]*Xun[T+1,i]
+}
+Aa[1] = sum(Bb)
+## Cauculate the final estimator value
+estMLPF[h] = sum(Aa)
+}
+
+## Cost&MSE for the plot
+N = vector(length = L+1)
+for(i in 0:L){
+  N[i+1] = ceiling(2^(L-i)*L) - 1
+}
+K = vector(length = L+1)
+K[1] = N[1]*T
+for(i in 1:L){
+  K[i+1] = N[i+1]*3*2^(i-1)*T
+}
+work_MLPF[L] = sum(K)
+MSE_MLPF[L] = (mean(estMLPF)-tv)^2 + var(estMLPF)
+var_MLPF[L] = var(estMLPF)
+mean_MLPF[L] = mean(estMLPF)
+}
+date()
+```
+
+
+# Langevin MLPF Wasserstein resampling
+```{r}
+# Gradient Estimator, dYt = Xt*dt+dBt, dXt = (-11/20)*Xt*(1+(Xt^2)/10)^(-1)*dt + dWt (Using change of measure)
+# Multilevel Particle Filter structure 
+date()
+mean1_PF = vector(mode = "numeric",length = 8)
+MSE1_MLPF = vector(mode = "numeric",length = 8)
+var1_MLPF = vector(mode = "numeric",length = 8)
+work1_MLPF = vector(mode = "numeric",length = 8)
+for(ltemp in 1:8){
+T = 100
+L = ltemp
+R= 200
+estMLPF = vector(mode = "numeric",length = R)
+
+for(h in 1:R){
+Aa = vector(mode = "numeric", length = L+1)
+for(l in 1:L){
+N = ceiling(2^(L-1.5*l)) - 1
+ko = vector(mode = "numeric",length = N)
+Xun = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xun1 = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xunc = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xunc1 = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+## replication of algorithm to get "true value"
+Xun[1,]=ko
+Xun1[1,]=ko
+Xunc[1,]=ko
+Xunc1[1,]=ko
+wf = vector(mode = "numeric", length = N)
+wc = vector(mode = "numeric", length = N)
+Wf = vector(mode = "numeric", length = N)
+Wc = vector(mode = "numeric", length = N)
+Gf = vector(mode = "numeric", length = N)
+Gc = vector(mode = "numeric", length = N)
+Bb = vector(mode = "numeric", length = N)
+for (p in 1:T) {
+  for(i in 1:N){
+  ## Particle update for one time unit
+  dw = vector(mode = "numeric", length =(2^l))
+  ## Finer path
+  fdis = vector(mode = "numeric", length =(2^l+1))
+  fdis[1] = Xun1[p,i]
+  for (j in 1:(2^l)) {
+      dw[j] = rnorm(1, mean=0, sd = sqrt(0.5^l))
+      fdis[j+1] = (-11/20)*fdis[j]*(1+0.1*fdis[j]^2)^(-1)*2^(-l) + dw[j] + fdis[j]
+  }
+  Xun[p+1,i]=fdis[(2^l+1)]
+  ##Coarser path
+  cdis = vector(mode = "numeric", length =(2^(l-1)+1))
+  cdis[1] = Xunc1[p,i]
+  for(j in 1:(2^(l-1))){
+    cdis[j+1] = (-11/20)*cdis[j]*(1+0.1*cdis[j]^2)^(-1)*0.5^(l-1) + (dw[2*j]+dw[2*j-1]) + cdis[j]
+  }
+  Xunc[p+1,i]=cdis[(2^(l-1)+1)]
+  ## G Function,note that there should only be one set of data,thus the y_{(k+1)*\Delta_{L}} - y_{(k)*\Delta_{L}} should be sampled only once
+   xdd = vector(mode="numeric",length =(2^l))
+  for(id in 1:(2^l)){
+    xdd[id] = fdis[id]*(Ydis[(p-1)*2^Lmax+id*2^(Lmax-l)+1]-Ydis[(p-1)*2^Lmax+(id-1)*2^(Lmax-l)+1]) - 0.5^(l+1)*(fdis[id]^2)
+  }
+  Gf[i]= sum(xdd)
+  xdd = vector(mode="numeric",length =(2^(l-1)))
+  for(id in 1:(2^(l-1))){
+    xdd[id] = cdis[id]*(Ydis[(p-1)*2^Lmax+id*2^(Lmax-l+1)+1]-Ydis[(p-1)*2^Lmax+(id-1)*2^(Lmax-l+1)+1]) - 0.5^(l)*(cdis[id]^2)
+  }
+  Gc[i]= sum(xdd)
+  }
+  ## normalized weights
+  Wf = exp(Gf-max(Gf))
+  Wc = exp(Gc-max(Gc))
+  wf = Wf/sum(Wf)
+  wc = Wc/sum(Wc)
+  ## Effective Sample Size
+  ESS1 = (sum(wf^2))^(-1)
+  if(ESS1<=(N/2)){
+    If = vector(mode = "numeric",length = N)
+    Ic = vector(mode = "numeric",length = N)
+    ## Below is Wasserstein resampling method
+    dice = runif(N,min = 0,max = 1)
+    ## First we sort the particles
+    uc1 = Xunc[p+1,]
+    csort = uc1[order(uc1,decreasing = FALSE)]
+    ## Sort weights the same way as the particles
+    wcsort = wc[order(uc1,decreasing = FALSE)]
+    ## Get the index
+    cumc = cumsum(wcsort)
+    Ic = findInterval(dice,cumc)+1
+    ## Same step for finer path particles
+    Uhat = Xun[p+1,]
+    usort = Uhat[order(Uhat,decreasing = FALSE)]
+    wsort = w[order(Uhat,decreasing = FALSE)]
+    cum = cumsum(wsort)
+    If = findInterval(dice,cum,rightmost.closed = TRUE)+1
+    ## Update
+    for(i in 1:N){
+      Xun1[p+1,i] = usort[ix[i]]
+      Xunc1[p+1,i] = csort[ix[i]]
+    }
+  }
+  if(ESS1>(N/2)){
+    Xun1[p+1,]=Xun[p+1,]
+    Xunc1[p+1,]=Xunc[p+1,]
+  }
+}
+for (i in 1:N) {
+  Bb[i] = wf[i]*Xun[T+1,i] - wc[i]*Xunc[T+1,i]
+}
+Aa[l+1]=sum(Bb)
+}
+## Now, Aa include the summand for l from 1 to L , but l = 0 term has yet to be added into the map.
+N = ceiling(2^(L)*L) - 1
+ko = vector(mode = "numeric",length = N)
+Xun = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xun1 = matrix(c(1:((T+1)*N)),nrow=(T+1),ncol=N)
+Xun[1,]=ko
+Xun1[1,]=ko
+Wf = vector(mode = "numeric", length = N)
+Gf = vector(mode = "numeric", length = N)
+Bb = vector(mode = "numeric", length = N)
+for (p in 1:T) {
+  for(i in 1:N){
+  ## Particle update for one time unit
+  ## Finer path
+  fdis = vector(mode = "numeric", length =2)
+  fdis[1] = Xun1[p,i]
+  dw = rnorm(1, mean=0, sd = 1)
+  fdis[2] = (-11/20)*fdis[1]*(1+0.1*fdis[1]^2)^(-1) + dw + fdis[1]
+  Xun[p+1,i]=fdis[2]
+  ## G Function
+   xdd = vector(mode="numeric",length =(2^0))
+  for(id in 1:(2^0)){
+    xdd[id] = fdis[id]*(Ydis[(p-1)*2^Lmax+id*2^(Lmax)+1]-Ydis[(p-1)*2^Lmax+(id-1)*2^(Lmax)+1]) - 0.5^(1)*(fdis[id]^2)
+  }
+  Gf[i]= sum(xdd)
+  }
+  ## normalized weights function
+  Wf = exp(Gf-max(Gf))
+  wf = Wf/sum(Wf)
+  ESS2 = (sum(wf^2))^(-1)
+  if(ESS2<(N/2)){
+  If = vector(mode = "numeric", length = N)
+  If <- rdiscrete(N, Wf)
+  for(i in 1:N){
+    Xun1[p+1,i] = Xun[p+1,If[i]]
+  }
+  }
+  if(ESS2>=(N/2)){
+    Xun1[p+1,]=Xun[p+1,]
+  }
+}
+for (i in 1:N) {
+  Bb[i] = wf[i]*Xun[T+1,i]
+}
+Aa[1] = sum(Bb)
+## Cauculate the final estimator value
+estMLPF[h] = sum(Aa)
+}
+
+## Cost&MSE for the plot
+N = vector(length = L+1)
+for(i in 0:L){
+  N[i+1] = ceiling(2^(L-i)*L) - 1
+}
+K = vector(length = L+1)
+K[1] = N[1]*T
+for(i in 1:L){
+  K[i+1] = N[i+1]*3*2^(i-1)*T
+}
+work1_MLPF[L] = sum(K)
+MSE1_MLPF[L] = (mean(estMLPF)-tv)^2 + var(estMLPF)
+var1_MLPF[L] = var(estMLPF)
+mean1_MLPF[L] = mean(estMLPF)
+}
+date()
+```
